@@ -238,7 +238,30 @@ export default async function handler(req, res) {
   const { action } = req.query;
   if (!action) return res.status(400).json({ ok: false, error: 'action parameter required' });
 
-  // ── token — no rate limit cost ────────────────────────────────────────────
+  // ── ping — tests basic connectivity to DDA without auth ──────────────────
+  if (action === 'ping') {
+    const start = Date.now();
+    try {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 8000);
+      const resp = await fetch(`${baseUrl}`, { signal: ctrl.signal, method: 'HEAD' });
+      clearTimeout(tid);
+      return res.status(200).json({
+        ok: true, reachable: true, status: resp.status,
+        latency_ms: Date.now() - start, base_url: baseUrl,
+        credentials_present: { securityId: !!securityId, clientId: !!clientId, clientSecret: !!clientSecret },
+      });
+    } catch (err) {
+      return res.status(200).json({
+        ok: false, reachable: false,
+        error: err.name === 'AbortError' ? 'Timed out after 8s — DDA unreachable from Vercel' : err.message,
+        latency_ms: Date.now() - start, base_url: baseUrl,
+        credentials_present: { securityId: !!securityId, clientId: !!clientId, clientSecret: !!clientSecret },
+      });
+    }
+  }
+
+  // ── token — no rate limit cost ─────────────────────────────────────────────
   if (action === 'token') {
     try {
       const token = await getToken(baseUrl, securityId, clientId, clientSecret);
